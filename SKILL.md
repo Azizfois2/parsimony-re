@@ -199,6 +199,8 @@ Parsimony is not laziness. Stopping at strings and imports and giving a confiden
 
 ## Tier 2 contract — GhidraMCP
 
+**Why GhidraMCP is the reference backend.** GhidraMCP is a *reference implementation* of tier 2, not an endorsement or a dependency of the policy. It was chosen because it is Apache-2.0 (no commercial license required, unlike IDA/Hex-Rays or JEB), supports headless analysis via PyGhidra so it fits a disposable sandbox, exposes a narrow ~30-tool surface that can be deferred, and installs independently of the agent's other tooling. REA's ~207-tool MCP is available as another backend but carries far more context. radare2 and headless Ghidra are documented fallbacks. IDA, Binary Ninja and commercial engines are deliberately *not* added: the escalation mechanism must be measured before more backends are introduced. Any backend that satisfies the gate and evidence rules can replace this one without changing the policy.
+
 **Availability.** Keep GhidraMCP as a deferred/on-demand tool group. If the client cannot defer, use a separate Ghidra-enabled profile. Prose saying "only use Ghidra when needed" is a policy; it does not reduce per-prompt resource use.
 
 **Identity first.** Call `get_program_info` and record name, format, architecture, image base and hashes. In GUI mode the backend uses the *currently active* program, which can change underneath you; re-verify identity. In headless mode keep **separate projects for separate binaries**.

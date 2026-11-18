@@ -44,7 +44,7 @@ Use the cheapest operation capable of answering the question. Increase analytica
 | 2 — Deep native | escalation | GhidraMCP; headless Ghidra / radare2 as fallbacks |
 | 3 — Dynamic | specialized | lldb, Frida, Playwright, process/network capture |
 
-GhidraMCP is **one backend**, not the goal. Tier 3 exists because some questions cannot be answered by better decompilation at all.
+GhidraMCP is the **reference tier-2 backend**, not the goal or a dependency of the policy. It was chosen because it is Apache-2.0 (no commercial license, unlike IDA/Hex-Rays or JEB), supports headless PyGhidra analysis in a sandbox, exposes a narrow ~30-tool surface that fits deferred loading, and installs independently of the agent. REA's MCP (~207 tools) is another possible backend with much higher context cost; headless Ghidra and radare2 are documented fallbacks. Commercial engines are deliberately deferred until the escalation mechanism is measured. Any backend obeying the gate and evidence rules can replace it without changing the policy. Tier 3 exists because some questions cannot be answered by better decompilation at all.
 
 ## What an investigation looks like
 
