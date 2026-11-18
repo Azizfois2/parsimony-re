@@ -58,6 +58,21 @@ def build_prompt(task: dict, arm: dict, target_str: str) -> str:
     return "\n\n".join(parts)
 
 
+CLI_DEEP_RE = re.compile(
+    r"\b(r2\s+-qc|analyzeHeadless|jadx\s+-d|binwalk\s+-e|unblob\s+-e|ilspycmd\s+-p)\b", re.I
+)
+CLI_RUNTIME_RE = re.compile(
+    r"\b(frida|lldb\s+-p|dtrace|adb\s+logcat|--remote-debugging-port)\b", re.I
+)
+
+
+def detect_cli_actions(text: str) -> tuple[list[str], list[str]]:
+    """Find deep/runtime CLI tool invocations in the agent transcript."""
+    deep = sorted({m.group(1).lower() for m in CLI_DEEP_RE.finditer(text)})
+    runtime = sorted({m.group(1).lower() for m in CLI_RUNTIME_RE.finditer(text)})
+    return deep, runtime
+
+
 def extract_tool_calls(text: str) -> list[str]:
     names = []
     for m in re.finditer(r'"type"\s*:\s*"tool_use"', text):
@@ -218,6 +233,7 @@ def main() -> int:
                 wall = time.monotonic() - started
 
                 answer, usage, tool_calls, turns = parse_agent_output(stdout)
+                cli_deep, cli_runtime = detect_cli_actions(stdout)
                 record = {
                     "run_id": run_id,
                     "task": task["id"],
@@ -234,6 +250,8 @@ def main() -> int:
                     "usage": usage,
                     "turns_proxy": turns,
                     "tool_calls": tool_calls,
+                    "cli_deep_actions": cli_deep,
+                    "cli_runtime_actions": cli_runtime,
                 }
                 with result_path.open("w", encoding="utf-8") as f:
                     json.dump(record, f, indent=2, ensure_ascii=False)

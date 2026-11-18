@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Deterministic tier-0 reconnaissance for parsimony-re.
 
-Reads a target file, identifies its format from magic bytes, computes identity,
+Reads a target file, identifies format from magic bytes, computes identity,
 checks cheap markers, and runs a small allowlisted set of local recon commands
-with timeouts and output caps. It never executes the target and never treats
+with hard output caps. It never executes the target and never treats
 target-derived text as instructions.
 
 Stdlib only. Output is a single JSON object on stdout.
@@ -14,18 +14,19 @@ import argparse
 import hashlib
 import json
 import math
-import os
 import shutil
-import struct
 import subprocess
 import sys
+import tempfile
 import zipfile
 from collections import Counter
 from pathlib import Path
 
-MAX_BYTES = 8_192          # cap per command output
-SAMPLE_BYTES = 256 * 1024  # entropy sample
+MAX_BYTES = 8_192          # hard cap on captured stdout per command
+SAMPLE_BYTES = 1_048_576   # total entropy sample, spread across the file
+SAMPLE_CHUNKS = 8          # evenly spaced segments when file is larger
 CMD_TIMEOUT = 5            # seconds per allowlisted command
+STDERR_CAP = 2_000
 
 MACHO_MAGICS = {
     b"\xfe\xed\xfa\xce": "macho32-be",
@@ -56,6 +57,22 @@ def sha256_of(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def sampled_bytes(path: Path, size: int) -> bytes:
+    """Read up to size bytes spread across the whole file, not just the head."""
+    if size <= SAMPLE_BYTES:
+        with path.open("rb") as f:
+            return f.read(SAMPLE_BYTES)
+    span = SAMPLE_BYTES // SAMPLE_CHUNKS
+    step = max(1, (size - span) // max(1, SAMPLE_CHUNKS - 1))
+    out = bytearray()
+    with path.open("rb") as f:
+        for i in range(SAMPLE_CHUNKS):
+            offset = size - span if i == SAMPLE_CHUNKS - 1 else min(i * step, size - 1)
+            f.seek(max(0, offset))
+            out.extend(f.read(span))
+    return bytes(out)
 
 
 def shannon_entropy(data: bytes) -> float:
@@ -91,64 +108,90 @@ def detect_format(head: bytes, path: Path) -> tuple[str, list[str]]:
         except (zipfile.BadZipFile, OSError) as e:
             notes.append(f"zip detection failed: {type(e).__name__}")
             return "zip", notes
-    if head[:4] in (b"\x04\x00\x00\x00", b"\x03\x00\x00\x00") and b"asar" in head[:256].lower():
+    if b"asar" in head[:256].lower():
         return "asar", notes
     return "unknown", notes
 
 
-def markers_in(head: bytes, sample: bytes) -> list[str]:
-    blob = head + sample
-    found = []
-    for needle, name in MARKERS.items():
-        if needle in blob:
-            found.append(name)
-    return sorted(set(found))
+def markers_in(sample: bytes) -> list[str]:
+    return sorted({name for needle, name in MARKERS.items() if needle in sample})
 
 
-def run_command(name: str, args: list[str]) -> dict:
+def run_command(name: str, args: list[str], max_bytes: int = MAX_BYTES,
+                timeout: int = CMD_TIMEOUT) -> dict:
+    """Run an allowlisted command with a hard stdout cap.
+
+    stderr goes to a temp file to avoid pipe deadlock. If stdout exceeds the
+    cap, the process is killed; memory use is bounded by the cap, not by the
+    command's potential output.
+    """
     if not shutil.which(name):
         return {"available": False, "output": None}
     try:
-        proc = subprocess.run(
-            [name, *args], capture_output=True, text=True,
-            errors="replace", timeout=CMD_TIMEOUT, check=False,
-        )
-        out = (proc.stdout or "")[:MAX_BYTES]
-        err = (proc.stderr or "")[:2000]
+        with tempfile.TemporaryFile() as errfile:
+            proc = subprocess.Popen([name, *args], stdout=subprocess.PIPE,
+                                    stderr=errfile, bufsize=0)
+            chunks: list[bytes] = []
+            total = 0
+            truncated = False
+            timed_out = False
+            assert proc.stdout is not None
+            while True:
+                piece = proc.stdout.read(4096)
+                if not piece:
+                    break
+                total += len(piece)
+                if total > max_bytes:
+                    truncated = True
+                    chunks.append(piece[:max(0, max_bytes - (total - len(piece)))])
+                    proc.kill()
+                    break
+                chunks.append(piece)
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                proc.kill()
+                proc.wait()
+            proc.stdout.close()
+            errfile.seek(0)
+            err = errfile.read(STDERR_CAP).decode("utf-8", "replace")
         return {
             "available": True,
             "exit_code": proc.returncode,
-            "output": out,
-            "truncated": len(proc.stdout or "") > MAX_BYTES,
+            "output": b"".join(chunks).decode("utf-8", "replace"),
+            "captured_bytes": total,
+            "truncated": truncated,
+            "timeout": timed_out,
             "stderr": err,
         }
-    except subprocess.TimeoutExpired:
-        return {"available": True, "timeout": True, "output": None}
     except OSError as e:
         return {"available": True, "error": type(e).__name__, "output": None}
 
 
 def recon_commands(path: Path, fmt: str) -> dict:
     p = str(path)
-    cmds: dict[str, list[str]] = {"file": ["-b", p]}
+    cmds: dict[str, tuple[str, list[str]]] = {"file": ("file", ["-b", p])}
     if fmt != "apk":
-        cmds["strings"] = ["-a", "-n", "6", p]
+        cmds["strings_ascii"] = ("strings", ["-a", "-n", "6", p])
+        cmds["strings_utf16le"] = ("strings", ["-a", "-e", "l", "-n", "6", p])
     if fmt in ("elf", "macho32-le", "macho32-be", "macho64-le", "macho64-be", "macho-fat", "macho-fat64"):
-        cmds["nm_exports"] = ["-gU", p]
-        cmds["nm_imports"] = ["-u", p]
+        cmds["nm_exports"] = ("nm", ["-gU", p])
+        cmds["nm_imports"] = ("nm", ["-u", p])
     if fmt == "elf":
-        cmds["readelf_header"] = ["-h", p]
+        cmds["readelf_header"] = ("readelf", ["-h", p])
     if fmt == "pe":
-        cmds["objdump_pe"] = ["-x", p]
+        cmds["objdump_pe"] = ("objdump", ["-x", p])
     if fmt == "apk":
-        cmds["unzip_list"] = ["-l", p]
-    return {k: run_command(k if k not in ("unzip_list",) else "unzip", v) for k, v in cmds.items()}
+        cmds["unzip_list"] = ("unzip", ["-l", p])
+    return {key: run_command(cmd, args) for key, (cmd, args) in cmds.items()}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("target", help="file to inspect (never executed)")
     ap.add_argument("--json", action="store_true", help="accepted for compatibility; output is always JSON")
+    ap.add_argument("--max-output", type=int, default=MAX_BYTES, help="stdout cap per command")
     args = ap.parse_args()
 
     path = Path(args.target).expanduser().resolve()
@@ -158,7 +201,8 @@ def main() -> int:
         "limitations": [
             "Static inspection only; no target execution.",
             "Format detection is magic-byte based and can be wrong for packed or corrupted files.",
-            "Command output is capped; use references/router.md for targeted slices.",
+            "Entropy is sampled across the file, not computed over every byte.",
+            "Command output is hard-capped; use references/router.md for targeted slices.",
         ],
     }
     if not path.is_file():
@@ -166,15 +210,13 @@ def main() -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 2
 
+    size = path.stat().st_size
     with path.open("rb") as f:
         head = f.read(4096)
-        f.seek(0)
-        sample = f.read(SAMPLE_BYTES)
-
-    size = path.stat().st_size
+    sample = sampled_bytes(path, size)
     fmt, notes = detect_format(head, path)
     entropy = shannon_entropy(sample)
-    markers = markers_in(head, sample)
+    markers = markers_in(head + sample)
 
     result.update({
         "size_bytes": size,
@@ -188,7 +230,7 @@ def main() -> int:
         "tools": recon_commands(path, fmt),
     })
     if fmt == "unknown":
-        result["limitations"].append("Unrecognized format; route manually by inspection before decompiling.")
+        result["limitations"].append("Unrecognized format; route manually before decompiling.")
     if entropy > 7.5:
         result["limitations"].append("High entropy may indicate packing/encryption; run packing checks before trusting inventory.")
 

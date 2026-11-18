@@ -120,6 +120,9 @@ def main() -> int:
         ev = evidence_proxy(answer)
         ghidra_calls = [c for c in r.get("tool_calls", []) if c.startswith("mcp__ghidra")]
         rea_calls = [c for c in r.get("tool_calls", []) if c.startswith("mcp__rea")]
+        cli_deep = r.get("cli_deep_actions") or []
+        cli_runtime = r.get("cli_runtime_actions") or []
+        deep_calls = len(ghidra_calls) + len(cli_deep)
         usage = r.get("usage") or {}
         row = {
             "run_id": r.get("run_id"),
@@ -136,9 +139,12 @@ def main() -> int:
             "evidence": ev,
             "gate_id_present": bool(GATE_RE.search(answer)),
             "ghidra_calls": len(ghidra_calls),
+            "cli_deep_actions": len(cli_deep),
+            "cli_runtime_actions": len(cli_runtime),
+            "deep_calls": deep_calls,
             "rea_calls": len(rea_calls),
-            "unnecessary_escalation": bool(ghidra_calls) and bool(task.get("cheap_answer_sufficient")),
-            "missed_escalation": bool(task.get("requires_deep")) and not ghidra_calls
+            "unnecessary_escalation": bool(deep_calls) and bool(task.get("cheap_answer_sufficient")),
+            "missed_escalation": bool(task.get("requires_deep")) and not deep_calls
                                  and hits is not None and hits < possible,
             "timeout": r.get("timeout", False),
         }
@@ -157,8 +163,11 @@ def main() -> int:
             "mean_tokens": mean([r["tokens"] for r in rows]),
             "mean_cost": mean([r["cost"] for r in rows]),
             "mean_ghidra_calls": mean([r["ghidra_calls"] for r in rows]),
+            "mean_deep_calls": mean([r["deep_calls"] for r in rows]),
             "gate_ids_cited": sum(r["gate_id_present"] for r in rows),
-            "runs_with_escalation": sum(r["ghidra_calls"] > 0 for r in rows),
+            "runs_with_escalation": sum(r["deep_calls"] > 0 for r in rows),
+            "runs_with_runtime": sum(r["cli_runtime_actions"] > 0 for r in rows),
+            "mean_runtime_actions": mean([r["cli_runtime_actions"] for r in rows]),
             "unnecessary_escalations": sum(r["unnecessary_escalation"] for r in rows),
             "missed_escalations": sum(r["missed_escalation"] for r in rows),
             "mean_evidence_proxy": mean([r["evidence"]["score_0_3"] for r in rows]),
@@ -168,6 +177,8 @@ def main() -> int:
                     "score": f"{sum(r['score_hits'] for r in rs if r['score_hits'] is not None)}/"
                              f"{sum(r['score_possible'] for r in rs if r['score_hits'] is not None)}",
                     "mean_ghidra_calls": mean([r["ghidra_calls"] for r in rs]),
+                    "mean_deep_calls": mean([r["deep_calls"] for r in rs]),
+                    "mean_runtime_actions": mean([r["cli_runtime_actions"] for r in rs]),
                     "median_wall_s": med([r["wall_s"] for r in rs]),
                 }
                 for t in sorted({r["task"] for r in rows})
@@ -181,8 +192,8 @@ def main() -> int:
         "runs_examined": examined,
         "unscored_runs": unscored,
         "note": "Evidence quality is a heuristic proxy. See JUDGE_RUBRIC for LLM judging. "
-                "Deep-tool use is counted from MCP tool names only; CLI deep tools (r2, jadx, binwalk) "
-                "are not visible in tool_calls and must be judged from transcripts.",
+                "Deep calls combine MCP tool names and CLI deep tools detected in transcripts; "
+                "runtime actions are detected similarly. Pattern matching can miss aliases.",
         "arms": arms_summary,
         "rows": sorted(all_rows, key=lambda x: x["run_id"]),
     }
@@ -191,33 +202,34 @@ def main() -> int:
     )
 
     lines = ["# Benchmark summary", "", f"Runs examined: {examined} (unscored: {unscored})", ""]
-    lines.append("| Arm | Score | Median wall | Turns | Tokens | Cost | Gate IDs | Ghidra calls | Unnecessary | Missed | Evidence proxy |")
-    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("| Arm | Score | Median wall | Turns | Tokens | Cost | Gate IDs | Deep calls | Runtime | Unnecessary | Missed | Evidence proxy |")
+    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for arm, s in arms_summary.items():
         def f(v, suffix=""):
             return "—" if v is None else f"{v:.2f}{suffix}"
         lines.append(
             f"| {arm} | {s['score']} | {f(s['median_wall_s'], 's')} | {f(s['mean_turns'])} | "
             f"{f(s['mean_tokens'])} | {'$' + f(s['mean_cost']) if s['mean_cost'] is not None else '—'} | "
-            f"{s['gate_ids_cited']} | {f(s['mean_ghidra_calls'])} | "
+            f"{s['gate_ids_cited']} | {f(s['mean_deep_calls'])} | {f(s['mean_runtime_actions'])} | "
             f"{s['unnecessary_escalations']} | {s['missed_escalations']} | {f(s['mean_evidence_proxy'])} |"
         )
     lines += ["", "## Per task", ""]
     for arm, s in arms_summary.items():
         lines.append(f"### {arm}")
         lines.append("")
-        lines.append("| Task | Score | Ghidra calls | Median wall |")
-        lines.append("|---|---|---:|---:|")
+        lines.append("| Task | Score | Deep calls | Runtime | Median wall |")
+        lines.append("|---|---|---:|---:|---:|")
         for t, v in s["by_task"].items():
-            calls = "—" if v["mean_ghidra_calls"] is None else f"{v['mean_ghidra_calls']:.2f}"
+            calls = "—" if v["mean_deep_calls"] is None else f"{v['mean_deep_calls']:.2f}"
+            runtime = "—" if v["mean_runtime_actions"] is None else f"{v['mean_runtime_actions']:.2f}"
             wall = "—" if v["median_wall_s"] is None else f"{v['median_wall_s']:.1f}s"
-            lines.append(f"| {t} | {v['score']} | {calls} | {wall} |")
+            lines.append(f"| {t} | {v['score']} | {calls} | {runtime} | {wall} |")
         lines.append("")
     lines += [
         "## Judge rubric (for LLM grading)", "",
         "```text", JUDGE_RUBRIC.rstrip(), "```", "",
         "Evidence proxy columns above are heuristics, not judge scores. "
-        "Deep-tool use is counted from MCP tool names only; inspect transcripts for CLI deep tools.",
+        "Deep/runtime counts use MCP tool names plus transcript pattern matching; aliases may be missed.",
     ]
     md = "\n".join(lines)
     (out / "summary.md").write_text(md, encoding="utf-8")

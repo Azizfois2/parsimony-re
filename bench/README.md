@@ -40,14 +40,15 @@ Verify manually that arms 2 and 4 actually differ in tool visibility — the har
 - **accuracy** — regex answer keys in `tasks.json`
 - **wall time**, **tokens**, **cost**, **turns** — from agent JSON output where available
 - **gate compliance** — answers containing a recorded `GATE-xxxxxxxx` id from `scripts/gate.py`
-- **escalations** — `mcp__ghidra__*` tool calls
+- **deep calls** — `mcp__ghidra__*` tool calls plus CLI deep tools (`r2`, `analyzeHeadless`, `jadx`, `binwalk`, `unblob`, `ilspycmd`) detected in transcripts
+- **runtime actions** — `frida`, `lldb -p`, `dtrace`, `adb logcat`, remote debugging detected in transcripts
 - **unnecessary escalations** — Ghidra calls on tasks flagged `cheap_answer_sufficient: true`
 - **missed escalations** — tasks flagged `requires_deep: true` where no deep tool was called **and** the answer scored below full marks; this measures confident under-escalation
 - **evidence quality** — heuristic proxy: labels, anchors, stated limitations
 
 Both escalation directions are now measured. A parsimony policy can fail by stopping too early, so over-escalation alone was an asymmetric metric.
 
-Deep-tool counting uses MCP tool names only. CLI tools such as `r2`, `jadx` and `binwalk` are not visible in `tool_calls` and must be judged from the transcripts. Evidence quality is a **proxy**, not ground truth — use `JUDGE_RUBRIC` in `score.py` with a judge model for a real claim.
+CLI deep and runtime actions are detected by regex over the preserved transcript (`cli_deep_actions` / `cli_runtime_actions` in each result). This is broader than MCP tool names but can miss aliases or indirect calls; spot-check transcripts. Evidence quality is a **proxy**, not ground truth — use `JUDGE_RUBRIC` in `score.py` with a judge model for a real claim.
 
 ## Tasks
 
@@ -90,9 +91,13 @@ Options:
 
 Fresh target copies per run match the original methodology. Raw output is under `results/<out>/transcripts/`.
 
+## Holdout set
+
+Results on these six tasks are hypothesis-generating only — see [`HOLDOUT.md`](HOLDOUT.md) for the protocol to build an independent task set before making claims.
+
 ## What this does not do
 
 - Install targets, Ghidra, REA or the skills.
 - Prove arms 2 and 4 differ in tool visibility.
 - Execute targets unless a task's setup or prompt calls for it. Sandbox untrusted targets.
-- Detect CLI-based deep analysis from tool-call metadata; inspect transcripts.
+- Guarantee CLI-action detection is complete; regex matching can miss aliases. Spot-check transcripts.
