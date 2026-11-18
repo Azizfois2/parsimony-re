@@ -1,8 +1,18 @@
-# parsimony-re
+# parsimony-re — a cost-aware reverse-engineering agent skill
 
-A reverse-engineering skill that separates **deciding how much analysis is needed** from **performing the analysis**.
+[![tests](https://github.com/Azizfois2/parsimony-re/actions/workflows/tests.yml/badge.svg)](https://github.com/Azizfois2/parsimony-re/actions/workflows/tests.yml) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![agent skill](https://img.shields.io/badge/agent--skill-skills.sh-7c3aed.svg)](https://skills.sh/Azizfois2/parsimony-re)
 
-The cheap CLI path is the default. Deeper engines are optional backends entered only when evidence justifies the cost.
+A reverse-engineering agent skill that separates **deciding how much analysis is needed** from **performing the analysis**. Cheap CLI reconnaissance is the default; GhidraMCP, radare2 and runtime tooling are optional escalation backends. Includes seen/inferred/unknown evidence labels, a hash-chained escalation gate, and a five-arm benchmark harness.
+
+## Quick start
+
+```sh
+npx skills add Azizfois2/parsimony-re
+# or try a skill prompt without installing:
+npx skills use Azizfois2/parsimony-re --skill parsimony-re
+```
+
+Installs are what make a skill appear on [skills.sh](https://skills.sh/Azizfois2/parsimony-re); the registry is telemetry-driven.
 
 ```
 parsimony-re/
@@ -35,6 +45,31 @@ Use the cheapest operation capable of answering the question. Increase analytica
 | 3 — Dynamic | specialized | lldb, Frida, Playwright, process/network capture |
 
 GhidraMCP is **one backend**, not the goal. Tier 3 exists because some questions cannot be answered by better decompilation at all.
+
+## What an investigation looks like
+
+Tier 0 emits a bounded JSON inventory instead of an unbounded wall of tool output:
+
+```json
+{
+  "format": "pe",
+  "sha256": "…",
+  "entropy_0_8": 7.81,
+  "high_entropy_sample": true,
+  "markers": ["mz_header", "upx_marker"],
+  "limitations": ["High entropy may indicate packing; run packing checks before trusting inventory."]
+}
+```
+
+An escalation then carries a recorded gate id and an evidence record, so the expensive step is justified and the conclusion stays auditable:
+
+| Field | Example |
+|---|---|
+| Claim | The socket path is `/tmp/<sid>.sock` |
+| Status | Inferred |
+| Anchor | `decompile_function_by_address 0x4015c0` |
+| Limitation | Format string recovered from pseudocode; not observed at runtime |
+| Gate | `GATE-fe8efb42` (tier 2) |
 
 ## What makes this different from combining two tool lists
 
