@@ -1,0 +1,79 @@
+{
+  "tasks": [
+    {
+      "id": "electron-ipc",
+      "tier": "easy",
+      "target": "electron/Notion.app",
+      "question": "Trace how meeting/mic detection works. Name the native function, the main-process class, and the exact IPC channel used to notify the renderer.",
+      "output_shape": "Give three named facts plus one anchor (file:offset or channel string) for each.",
+      "cheap_answer_sufficient": true,
+      "requires_runtime": false,
+      "answer_keys": [
+        {"name": "native_function", "pattern": "TODO_NATIVE_FUNCTION", "placeholder": true},
+        {"name": "main_class", "pattern": "TODO_MAIN_CLASS", "placeholder": true},
+        {"name": "ipc_channel", "pattern": "TODO_IPC_CHANNEL", "placeholder": true}
+      ],
+      "notes": "Placeholder. Replace with regexes for your exact app version."
+    },
+    {
+      "id": "go-metadata",
+      "tier": "easy",
+      "target": "go/gh",
+      "question": "Report the Go toolchain version, the main package path, and the versions of two named dependencies.",
+      "output_shape": "Four short facts with the command output that supports each.",
+      "cheap_answer_sufficient": true,
+      "requires_runtime": false,
+      "answer_keys": [
+        {"name": "toolchain", "pattern": "TODO_GO_VERSION", "placeholder": true},
+        {"name": "main_path", "pattern": "TODO_MAIN_PATH", "placeholder": true},
+        {"name": "dep1", "pattern": "TODO_DEP1", "placeholder": true},
+        {"name": "dep2", "pattern": "TODO_DEP2", "placeholder": true}
+      ],
+      "notes": "Placeholder. go version -m should answer this in tier 0."
+    },
+    {
+      "id": "native-exports",
+      "tier": "medium",
+      "target": "native/mac_utils.node",
+      "question": "List the exported symbols, the TCC permission check, and the single-instance lock mechanism in the native addon.",
+      "output_shape": "Named symbols plus the call sequence supporting each conclusion.",
+      "cheap_answer_sufficient": true,
+      "requires_runtime": false,
+      "answer_keys": [
+        {"name": "export", "pattern": "TODO_EXPORT", "placeholder": true},
+        {"name": "tcc_check", "pattern": "TODO_TCC", "placeholder": true},
+        {"name": "lock", "pattern": "TODO_LOCK", "placeholder": true}
+      ],
+      "notes": "Placeholder. Intended to be answerable without decompilation."
+    },
+    {
+      "id": "native-deep",
+      "tier": "hard",
+      "target": "native/mac_utils.node",
+      "question": "From disassembly, recover the exact socket path format, the wire protocol, and how peer authentication is performed.",
+      "output_shape": "Three precise facts with instruction addresses as anchors. Mark any inference explicitly.",
+      "cheap_answer_sufficient": false,
+      "requires_runtime": false,
+      "answer_keys": [
+        {"name": "socket_path", "pattern": "TODO_SOCKET_FORMAT", "placeholder": true},
+        {"name": "wire_protocol", "pattern": "TODO_PROTOCOL", "placeholder": true},
+        {"name": "peer_auth", "pattern": "TODO_AUTH", "placeholder": true}
+      ],
+      "notes": "Placeholder. This is the escalation-worthy task."
+    },
+    {
+      "id": "runtime-behavior",
+      "tier": "dynamic",
+      "target": "native/target-app",
+      "question": "Determine what the application actually sends over the socket at runtime, and whether the authentication check accepts an unprivileged peer.",
+      "output_shape": "Observed requests/responses with captured output as anchors. Do not infer runtime behavior from static reading.",
+      "cheap_answer_sufficient": false,
+      "requires_runtime": true,
+      "answer_keys": [
+        {"name": "payload", "pattern": "TODO_PAYLOAD", "placeholder": true},
+        {"name": "auth_result", "pattern": "TODO_AUTH_RESULT", "placeholder": true}
+      ],
+      "notes": "Placeholder. Static-only answers should be graded as Unknown, not correct."
+    }
+  ]
+}

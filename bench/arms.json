@@ -1,0 +1,44 @@
+{
+  "arms": [
+    {
+      "name": "leanrea",
+      "description": "Cheap-path baseline. No MCP server, leanrea skill only.",
+      "skill_command": "/leanrea",
+      "mcp_config": null,
+      "extra_args_env": null,
+      "prompt_prefix": "Use the leanrea skill only. Do not call any MCP tool. Answer from local CLI tools.",
+      "env": {},
+      "command": ["claude", "-p", "$PROMPT", "--output-format", "json"]
+    },
+    {
+      "name": "leanrea_deferred_ghidra",
+      "description": "Escalation available but discovered on demand (client default).",
+      "skill_command": "/leanrea",
+      "mcp_config": "configs/ghidra.json",
+      "extra_args_env": null,
+      "prompt_prefix": "Use the leanrea skill. A Ghidra MCP server is registered but should be treated as an optional on-demand escalation backend. Follow the parsimony-re escalation gate before invoking it.",
+      "env": {},
+      "command": ["claude", "-p", "$PROMPT", "--output-format", "json", "--mcp-config", "$MCP_CONFIG"]
+    },
+    {
+      "name": "leanrea_always_ghidra",
+      "description": "Escalation visible in every prompt. Set BENCH_ALWAYS_ARGS for your client.",
+      "skill_command": "/leanrea",
+      "mcp_config": "configs/ghidra.json",
+      "extra_args_env": "BENCH_ALWAYS_ARGS",
+      "prompt_prefix": "Use the leanrea skill. A Ghidra MCP server is registered and all of its tools are available to you. Follow the parsimony-re escalation gate before invoking it.",
+      "env": {},
+      "command": ["claude", "-p", "$PROMPT", "--output-format", "json", "--mcp-config", "$MCP_CONFIG"]
+    },
+    {
+      "name": "rea_native",
+      "description": "Integrated system. REA MCP plus its skill, with native providers installed.",
+      "skill_command": "/reverse-engineer-anything",
+      "mcp_config": "configs/rea.json",
+      "extra_args_env": null,
+      "prompt_prefix": "Use the REA reverse-engineering skill and its MCP tools. Native analysis providers are installed and enabled.",
+      "env": {},
+      "command": ["claude", "-p", "$PROMPT", "--output-format", "json", "--mcp-config", "$MCP_CONFIG"]
+    }
+  ]
+}
