@@ -101,7 +101,7 @@ See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for upstream license noti
 
 The durable contribution is the **decision-making mechanism**, not the command collection. Anyone can collect commands.
 
-- Every rule in `SKILL.md` must justify its context cost. `SKILL.md` is ~17 KB; full recipes live in `references/router.md` and are loaded only when a target type is known. Enforcement lives in `scripts/gate.py` and `scripts/tier0.py`, which are not loaded into context.
+- Every rule in `SKILL.md` must justify its context cost. `SKILL.md` is ~18 KB; full recipes live in `references/router.md` and are loaded only when a target type is known. Enforcement lives in `scripts/gate.py` and `scripts/tier0.py`, which are not loaded into context.
 - Do not grow this into a general reverse-engineering manual.
 - Do not add more backends (IDA, Binary Ninja, extra MCP servers) until the escalation mechanism has been measured.
 
