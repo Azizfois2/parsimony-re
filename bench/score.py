@@ -33,6 +33,8 @@ ANCHOR_RE = re.compile(
     r"\b(rg|nm|otool|readelf|objdump|tshark|sqlite3|asar|jadx|frida|lldb|asar)\b)",
     re.I,
 )
+GATE_RE = re.compile(r"GATE-[0-9a-fA-F]{8}")
+
 LIMIT_RE = re.compile(
     r"\b(unknown|not observed|cannot establish|limitation|inferred|unverified|"
     r"no evidence|static analysis|not proven)\b",
@@ -132,6 +134,7 @@ def main() -> int:
             "score_possible": possible,
             "key_detail": detail,
             "evidence": ev,
+            "gate_id_present": bool(GATE_RE.search(answer)),
             "ghidra_calls": len(ghidra_calls),
             "rea_calls": len(rea_calls),
             "unnecessary_escalation": bool(ghidra_calls) and bool(task.get("cheap_answer_sufficient")),
@@ -154,6 +157,7 @@ def main() -> int:
             "mean_tokens": mean([r["tokens"] for r in rows]),
             "mean_cost": mean([r["cost"] for r in rows]),
             "mean_ghidra_calls": mean([r["ghidra_calls"] for r in rows]),
+            "gate_ids_cited": sum(r["gate_id_present"] for r in rows),
             "runs_with_escalation": sum(r["ghidra_calls"] > 0 for r in rows),
             "unnecessary_escalations": sum(r["unnecessary_escalation"] for r in rows),
             "missed_escalations": sum(r["missed_escalation"] for r in rows),
@@ -187,14 +191,15 @@ def main() -> int:
     )
 
     lines = ["# Benchmark summary", "", f"Runs examined: {examined} (unscored: {unscored})", ""]
-    lines.append("| Arm | Score | Median wall | Turns | Tokens | Cost | Ghidra calls | Unnecessary | Missed | Evidence proxy |")
-    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("| Arm | Score | Median wall | Turns | Tokens | Cost | Gate IDs | Ghidra calls | Unnecessary | Missed | Evidence proxy |")
+    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for arm, s in arms_summary.items():
         def f(v, suffix=""):
             return "—" if v is None else f"{v:.2f}{suffix}"
         lines.append(
             f"| {arm} | {s['score']} | {f(s['median_wall_s'], 's')} | {f(s['mean_turns'])} | "
-            f"{f(s['mean_tokens'])} | {'$' + f(s['mean_cost']) if s['mean_cost'] is not None else '—'} | {f(s['mean_ghidra_calls'])} | "
+            f"{f(s['mean_tokens'])} | {'$' + f(s['mean_cost']) if s['mean_cost'] is not None else '—'} | "
+            f"{s['gate_ids_cited']} | {f(s['mean_ghidra_calls'])} | "
             f"{s['unnecessary_escalations']} | {s['missed_escalations']} | {f(s['mean_evidence_proxy'])} |"
         )
     lines += ["", "## Per task", ""]

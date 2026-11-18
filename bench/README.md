@@ -39,6 +39,7 @@ Verify manually that arms 2 and 4 actually differ in tool visibility — the har
 
 - **accuracy** — regex answer keys in `tasks.json`
 - **wall time**, **tokens**, **cost**, **turns** — from agent JSON output where available
+- **gate compliance** — answers containing a recorded `GATE-xxxxxxxx` id from `scripts/gate.py`
 - **escalations** — `mcp__ghidra__*` tool calls
 - **unnecessary escalations** — Ghidra calls on tasks flagged `cheap_answer_sufficient: true`
 - **missed escalations** — tasks flagged `requires_deep: true` where no deep tool was called **and** the answer scored below full marks; this measures confident under-escalation

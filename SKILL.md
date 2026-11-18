@@ -55,6 +55,18 @@ Cost rises *within* tiers too. Tier 1 has its own 1a/1b/1c gradient.
 
 Tier 2 and tier 3 are different: better decompilation cannot answer a question that needs runtime observation.
 
+### What "cost" means here
+
+Three separate axes are being conflated whenever someone says "cheap":
+
+| Axis | What it measures | Role in this policy |
+|---|---|---|
+| **Context tokens** | prompt + tool definitions + output loaded into the model | **Primary optimization target.** This is the cost parsimony minimizes. |
+| **Wall time** | compute and waiting | Reported, not the target. A minute of `jadx` that yields a 24 KB grep target is cheaper in context than a 140 MB JSON dump. |
+| **Risk** | irreversibility, host exposure, epistemic contamination | Hard constraint. Sandboxing, pinned tools, read-first and the rename rule apply regardless of token cost. |
+
+A rung may be expensive in wall time and still be the cheapest useful path in context tokens. Choose by the axis you are optimizing; do not gate a `jadx` extraction merely because it takes minutes.
+
 ---
 
 ## Tier 0 — deterministic reconnaissance (always)
@@ -71,14 +83,19 @@ Manual fallback:
 
 ```sh
 file -b T
-sha256sum T 2>/dev/null || shasum -a 256 T
 wc -c < T
-strings -a -n 6 T | head -400
-nm -gU T | head -150           # exports
-nm -u T | head -200            # imports = capability map
+sha256sum T || shasum -a 256 T || Get-FileHash -Algorithm SHA256 T
+binwalk -E T | head -40          # entropy: flat/high suggests packing
+diec T || die T || echo "unknown: no packer detector installed"
+strings -a -n 6 T | head -400    # ASCII
+strings -a -e l -n 6 T | head -200   # UTF-16LE: common in PE binaries
+# Symbols are format-specific: Mach-O: nm -gU T / nm -u T
+#                               ELF:    nm -D --defined-only T / readelf -dW T
 ```
 
-For archives, list members first. If tier 0 already answers the question, **answer and stop**.
+Use the symbol command for the format you detected; `nm -gU` is Mach-O-flavoured and returns little on stripped ELF. A command that is missing or fails is recorded as **unknown**, never as an empty result or as evidence of absence. `tier0.py` already applies the entropy and format checks automatically.
+
+For archives, list members first. **"Answer and stop at tier 0" applies only when the question is about presence of something positively observed.** Absence of a string in a packed, stripped or UTF-16 binary is weak evidence: record unknown or escalate.
 
 ---
 
@@ -139,6 +156,16 @@ Before invoking tier 1c, tier 2 or tier 3, fill this in:
 5. **Stop condition:** what answer ends the investigation.
 
 **If you cannot fill in 1 and 3, do not escalate.**
+
+**Make the gate observable.** The five fields are an artifact, not a private thought. Before any tier 1c/2/3 action, record them:
+
+```sh
+python3 scripts/gate.py record --tier 2 --target T \
+  --question "..." --evidence "..." --why-cheap-fails "..." \
+  --backend-adds "..." --stop-condition "..."
+```
+
+The script validates the fields, appends a JSONL record and returns a `GATE-xxxxxxxx` id. **Cite that id in the answer**, and keep it in the investigation log. A tier 2/3 action with no gate id is a policy violation, even if the prose justification sounded reasonable. `python3 scripts/gate.py check --gate-id GATE-...` verifies a record exists. The benchmark counts gate ids as the gate-compliance metric.
 
 ### Escalate when
 

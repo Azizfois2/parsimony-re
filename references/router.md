@@ -6,6 +6,8 @@ Placeholders: `T` = target file, `X` = extraction directory, `D` = scratch direc
 
 Versions below are pinned deliberately. If a tool is not already installed in the sandbox image, **ask before installing**; do not let an unversioned `npx -y` or HEAD-tracking `uvx` fetch and execute remote code inside the analysis environment.
 
+A failing or missing tool produces **unknown**, never "absent". Where a recipe uses `|| echo "unknown: ..."`, that is deliberate: keep the failure visible instead of hiding it with `2>/dev/null`.
+
 ---
 
 ## Packed / obfuscated targets (check this early)
@@ -15,8 +17,8 @@ Versions below are pinned deliberately. If a tool is not already installed in th
 ```sh
 file -b T
 binwalk -E T                  # entropy profile; high flat entropy suggests packing/encryption
-diec T 2>/dev/null || die T   # Detect It Easy: packer/compiler signature
-upx -t T 2>/dev/null          # UPX check; only use `upx -d` on a copy
+diec T || die T || echo "unknown: no packer detector installed"
+upx -t T || echo "unknown: UPX check unavailable or not UPX-packed"
 floss T                       # obfuscated/stack strings, decoded strings
 capa T                        # capability mapping from features, not symbol names
 ```
@@ -30,7 +32,7 @@ If a packer is detected, unpack a **copy** first and re-run tier 0 on the unpack
 ```sh
 npx -y @electron/asar@4.3.2 list app.asar
 npx -y @electron/asar@4.3.2 extract app.asar X
-ls app.asar.unpacked/node_modules 2>/dev/null    # native .node addons live here
+ls app.asar.unpacked/node_modules || echo "unknown: no unpacked addons directory"    # native .node addons live here
 jq '{name,version,main}' X/package.json
 rg -uu -n -o '.{0,120}(ipcMain\.(handle|handleOnce|on|once)|ipcRenderer\.(invoke|send|sendSync|on)|contextBridge\.exposeIn(Main|Isolated)World|webPreferences|preload:|nodeIntegration|contextIsolation|sandbox|\.node\b).{0,160}' X --glob '!node_modules'
 npx -y @electron/fuses@2.1.3 read --app A.app
@@ -105,7 +107,7 @@ wrestool -l T                          # resources
 python3 -c "import pefile,sys; print(pefile.PE(sys.argv[1]).dump_info())" T | head -200
 ```
 
-If no PE tooling exists, `strings -a -n 6 T | rg -i '\.dll|GetProcAddress|LoadLibrary'` gives a cheap first pass. Do not present that as an import table.
+If no PE tooling exists, `strings -a -n 6 T | rg -i '\.dll|GetProcAddress|LoadLibrary'` gives a cheap first pass, but PE binaries often store these as UTF-16 — also run `strings -a -e l -n 6 T`. Do not present either as an import table.
 
 ---
 
