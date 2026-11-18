@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the four-arm parsimony-re benchmark.
+"""Run the parsimony-re benchmark (five arms, including a gate-isolation control).
 
 Executes agent CLI once per task x arm x rep, in a fresh target copy, and
 writes one JSON result per run plus the raw transcript.
@@ -119,7 +119,7 @@ def main() -> int:
     ap.add_argument("--arms", default=str(HERE / "arms.json"))
     ap.add_argument("--targets-root", default=os.environ.get("BENCH_TARGETS", "."))
     ap.add_argument("--out", default=str(HERE / "results" / "run"))
-    ap.add_argument("--reps", type=int, default=3)
+    ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--arm", help="run only this arm name")
     ap.add_argument("--task", help="run only this task id")

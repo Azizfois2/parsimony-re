@@ -16,7 +16,17 @@
       "skill_command": "/leanrea",
       "mcp_config": "configs/ghidra.json",
       "extra_args_env": null,
-      "prompt_prefix": "Use the leanrea skill. A Ghidra MCP server is registered but should be treated as an optional on-demand escalation backend. Follow the parsimony-re escalation gate before invoking it.",
+      "prompt_prefix": "Use the leanrea skill. A Ghidra MCP server is registered. Follow the parsimony-re escalation gate before invoking it.",
+      "env": {},
+      "command": ["claude", "-p", "$PROMPT", "--output-format", "json", "--mcp-config", "$MCP_CONFIG"]
+    },
+    {
+      "name": "leanrea_no_gate",
+      "description": "Gate-isolation control: identical deferred Ghidra tools, gate wording removed.",
+      "skill_command": "/leanrea",
+      "mcp_config": "configs/ghidra.json",
+      "extra_args_env": null,
+      "prompt_prefix": "Use the leanrea skill. A Ghidra MCP server is registered.",
       "env": {},
       "command": ["claude", "-p", "$PROMPT", "--output-format", "json", "--mcp-config", "$MCP_CONFIG"]
     },

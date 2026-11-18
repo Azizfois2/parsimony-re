@@ -99,7 +99,8 @@ def main() -> int:
 
     out = Path(args.out).resolve()
     tasks = {t["id"]: t for t in load_json(Path(args.tasks))["tasks"]}
-    results = [load_json(p) for p in sorted(out.glob("*.json"))]
+    candidates = [load_json(p) for p in sorted(out.glob("*.json")) if p.name != "summary.json"]
+    results = [r for r in candidates if isinstance(r, dict) and r.get("run_id")]
     if not results:
         print(f"No result JSON files in {out}", file=sys.stderr)
         return 2
@@ -134,6 +135,8 @@ def main() -> int:
             "ghidra_calls": len(ghidra_calls),
             "rea_calls": len(rea_calls),
             "unnecessary_escalation": bool(ghidra_calls) and bool(task.get("cheap_answer_sufficient")),
+            "missed_escalation": bool(task.get("requires_deep")) and not ghidra_calls
+                                 and hits is not None and hits < possible,
             "timeout": r.get("timeout", False),
         }
         by_arm[r.get("arm", "unknown")].append(row)
@@ -153,6 +156,7 @@ def main() -> int:
             "mean_ghidra_calls": mean([r["ghidra_calls"] for r in rows]),
             "runs_with_escalation": sum(r["ghidra_calls"] > 0 for r in rows),
             "unnecessary_escalations": sum(r["unnecessary_escalation"] for r in rows),
+            "missed_escalations": sum(r["missed_escalation"] for r in rows),
             "mean_evidence_proxy": mean([r["evidence"]["score_0_3"] for r in rows]),
             "timeouts": sum(r["timeout"] for r in rows),
             "by_task": {
@@ -172,7 +176,9 @@ def main() -> int:
         "results_dir": str(out),
         "runs_examined": examined,
         "unscored_runs": unscored,
-        "note": "Evidence quality is a heuristic proxy. See JUDGE_RUBRIC for LLM judging.",
+        "note": "Evidence quality is a heuristic proxy. See JUDGE_RUBRIC for LLM judging. "
+                "Deep-tool use is counted from MCP tool names only; CLI deep tools (r2, jadx, binwalk) "
+                "are not visible in tool_calls and must be judged from transcripts.",
         "arms": arms_summary,
         "rows": sorted(all_rows, key=lambda x: x["run_id"]),
     }
@@ -181,15 +187,15 @@ def main() -> int:
     )
 
     lines = ["# Benchmark summary", "", f"Runs examined: {examined} (unscored: {unscored})", ""]
-    lines.append("| Arm | Score | Median wall | Turns | Tokens | Cost | Ghidra calls | Unnecessary | Evidence proxy |")
-    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("| Arm | Score | Median wall | Turns | Tokens | Cost | Ghidra calls | Unnecessary | Missed | Evidence proxy |")
+    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     for arm, s in arms_summary.items():
         def f(v, suffix=""):
             return "—" if v is None else f"{v:.2f}{suffix}"
         lines.append(
             f"| {arm} | {s['score']} | {f(s['median_wall_s'], 's')} | {f(s['mean_turns'])} | "
             f"{f(s['mean_tokens'])} | {'$' + f(s['mean_cost']) if s['mean_cost'] is not None else '—'} | {f(s['mean_ghidra_calls'])} | "
-            f"{s['unnecessary_escalations']} | {f(s['mean_evidence_proxy'])} |"
+            f"{s['unnecessary_escalations']} | {s['missed_escalations']} | {f(s['mean_evidence_proxy'])} |"
         )
     lines += ["", "## Per task", ""]
     for arm, s in arms_summary.items():
@@ -205,7 +211,8 @@ def main() -> int:
     lines += [
         "## Judge rubric (for LLM grading)", "",
         "```text", JUDGE_RUBRIC.rstrip(), "```", "",
-        "Evidence proxy columns above are heuristics, not judge scores.",
+        "Evidence proxy columns above are heuristics, not judge scores. "
+        "Deep-tool use is counted from MCP tool names only; inspect transcripts for CLI deep tools.",
     ]
     md = "\n".join(lines)
     (out / "summary.md").write_text(md, encoding="utf-8")

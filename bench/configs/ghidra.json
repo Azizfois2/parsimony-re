@@ -4,7 +4,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/LaurieWired/GhidraMCP",
+        "git+https://github.com/LaurieWired/GhidraMCP@1e980252087b2479a21b9ca6d82d5829538651a7",
         "ghidra-mcp",
         "--ghidra-server",
         "http://127.0.0.1:8080/"
